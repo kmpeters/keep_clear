@@ -1,0 +1,67 @@
+DESCRIPTION
+
+keep_clear allows the user to specify directories that should be kept clear of data files.  It was written to work around the
+problem of increasing delays when writing hundreds of thousands of files to a samba server.
+
+SPECIFICS
+
+keep_clear
+
+This is the script that is run by the user.  It maintains a list of the directories that should be kept clear.
+
+keep_clear_cron
+
+This is the script that is called by cron, every two minutes.  If there are directories to keep clear, it calls keep_clear_script.
+
+keep_clear_script
+
+This is the script that does the work.  It moves and optionally copies the data files.
+
+INSTALLATION
+
+keep_clear must be installed in a directory that is on the path.  The other two scripts can reside anywhere, however
+keep_clear_cron contains the variable MOVE_SCRIPT which needs to accurately reflect the location of keep_clear_script.
+
+Here is an example installation:
+
+~/bin/keep_clear (add ~/bin to PATH)
+
+~/.keep_clear/keep_clear_cron
+~/.keep_clear/keep_clear_script
+
+And the following should be added to cron:
+
+0-59/2 * * * * $HOME/.keep_clear/keep_clear_cron >> /dev/null 2>&1
+
+HOW TO ACTUALLY USE IT
+
+Usage: keep_clear [OPTIONS]
+Adds (or removes) jobs to (or from) the list of directories to keep clear of data files.
+If no option is specified, a job will be added for the current working directory.
+
+  -h,             displays this help
+  -l,             list the directories that will be cleared
+  -a <path>,      add a directory other than the current working directory
+  -r <path>,      removes the job for the given data directory
+  -c <path>,      copies data files to another directory before moving them
+  -e <extension>, data file extension, without the dot, default: h5
+  -t <days>,      time to keep directory clear before expiring, default: 3
+  -s <dir name>,  name of data subdirectory, default: images
+  -v,             displays the version
+
+RELEASES
+
+Version 1.1 is the first general version
+
+DEPENDENCIES
+
+keep_clear depends on the following packages (and command-line programs):
+bash (built-ins: cd, read)
+coreutils (cat, cp, date, expr, echo, mkdir, mv, rm, sort, touch, tr) 
+util-linux-ng (colrm)
+grep (grep)
+cronie (crontab)
+procps (ps)
+findutils (find)
+
+Note: At the moment it will only work on Linux.  With a few minor changes, it should run on Solaris.

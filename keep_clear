@@ -1,0 +1,242 @@
+#!/bin/bash
+# script which adds a path to the list of directories 
+# to keep clear of data files
+
+## Site configuration
+
+THE_LIST="$HOME/.keep_clear_script_list"
+TIME_FILE_NAME=.keep_clear_script_time_file
+UPDATE_FILE="$HOME/.keep_clear_script_update"
+TIME_LIMIT=5
+
+## The script
+
+rem_arg=""
+copy_arg=""
+dir_arg=""
+copy_path=""
+
+flags=0
+do_stuff=1
+
+VERSION=1.1
+days=3
+subdirectory=images
+extension=h5
+
+HELP_FLAG=1
+LIST_FLAG=2
+REM_FLAG=4
+COPY_FLAG=8
+DIR_FLAG=16
+ERR_FLAG=32
+VER_FLAG=64
+EXT_FLAG=128
+TIME_FLAG=256
+SUB_FLAG=512
+
+## create the list file if it doesn't exist
+if [ ! -e "$THE_LIST" ]
+then
+  touch "$THE_LIST"
+fi
+
+while getopts ":hvlr:c:e:a:t:s:" flag
+do
+  #echo "$flag" $OPTIND $OPTARG
+  case "$flag" in 
+
+    "h" )
+    let "flags = $flags | $HELP_FLAG"
+    ;;
+
+    "v" )
+    let "flags = $flags | $VER_FLAG"
+    ;;
+
+    "l" )
+    let "flags = $flags | $LIST_FLAG"
+    ;;
+
+    "r" )
+    let "flags = $flags | $REM_FLAG"
+    rem_arg=$OPTARG
+    ;;
+
+    "c" )
+    let "flags = $flags | $COPY_FLAG"
+    copy_arg=$OPTARG
+    ;;
+
+    "e" )
+    let "flags = $flags | $EXT_FLAG"
+    extension=$OPTARG
+    ;;
+
+    "s" )
+    let "flags = $flags | $SUB_FLAG"
+    subdirectory=$OPTARG
+    ;;
+
+    "a" )
+    let "flags = $flags | $DIR_FLAG"
+    dir_arg=$OPTARG
+    ;;
+
+    "t" )
+    let "flags = $flags | $TIME_FLAG"
+    days=$OPTARG
+    ;;
+
+    \? )
+    echo "Error: -$OPTARG is an invalid option"
+    let "flags = $flags | $ERR_FLAG"
+    ;;
+
+    : )
+    echo "Error: -$OPTARG requires an argument"
+    let "flags = $flags | $ERR_FLAG"
+    ;;
+
+  esac
+
+done
+
+if (( ! ($flags & $ERR_FLAG) ))
+then
+  if (( $flags & $HELP_FLAG ))
+  then
+    echo "Usage: keep_clear [OPTIONS]" 
+    echo "Adds (or removes) jobs to (or from) the list of directories to keep clear of data files."
+    echo "If no option is specified, a job will be added for the current working directory."
+    echo ""
+    echo "  -h,             displays this help"
+    echo "  -l,             list the directories that will be cleared"
+    echo "  -a <path>,      add a directory other than the current working directory"
+    echo "  -r <path>,      removes the job for the given data directory"
+    echo "  -c <path>,      copies data files to another directory before moving them"
+    echo "  -e <extension>, data file extension, without the dot, default: h5"
+    echo "  -t <days>,      time to keep directory clear before expiring, default: 3"
+    echo "  -s <dir name>,  name of data subdirectory, default: images"
+    echo "  -v,             displays the version"
+    echo ""
+  
+  else
+    if (( $flags & $VER_FLAG ))
+    then
+      ## print the version
+      echo "keep_clear version $VERSION"
+    else
+      if (( $flags & $LIST_FLAG ))
+      then
+        ## print the list of directories to keep clear
+        cat "$THE_LIST" | colrm 1 11 | sort
+  
+      else
+        if (( $flags & $REM_FLAG ))
+        then
+          ## remove desired dir from list of dirs to keep clear
+          if [ -e "$rem_arg" ]
+          then
+            # changing to the directory allows relative paths to be used
+            cd "$rem_arg"
+            do_stuff=1
+          else
+            echo "The directory does not exist."
+            do_stuff=0
+          fi
+        
+          if [ $do_stuff -eq 1 ]
+          then
+            directory="$PWD"
+            ## this var will be passed to the grep command, so the space needs to be escaped
+            directory_esc="${PWD// /\\ }"
+
+            list_check=`grep "^[0-9]*:$directory_esc:" "$THE_LIST"`
+            if [ $? -eq 0 ]
+            then
+              #grep -v "$directory_esc:" "$THE_LIST" > "$UPDATE_FILE"
+              grep -v "^[0-9]*:$directory_esc:" "$THE_LIST" > "$UPDATE_FILE"
+              mv -f "$UPDATE_FILE" "$THE_LIST"
+              echo "Removed $directory from the list of directories to keep clear"
+              # remove the time file
+              rm -f "$directory/$TIME_FILE_NAME"
+            else
+              echo "The directory was not found in the list."
+            fi
+          fi
+  
+        else 
+          ### copy and dir should always be evaluated if h,l,and r flags aren't present
+          ## Copy
+          if (( $flags & $COPY_FLAG ))
+          then
+            # backup PWD because we'll need to return to it after getting the save path
+            pwd_backup="$PWD"
+            if [[ -e "$copy_arg" ]]
+            then
+              # changing to the directory allows relative paths to be used
+              cd "$copy_arg"
+              # by definition it will be a directory other than the keep_clear dir
+              copy_path="$PWD"
+            else
+              echo "The copy directory does not exist."
+            fi
+
+            cd "$pwd_backup"
+          fi
+
+          ## Dir
+          if (( $flags & $DIR_FLAG ))
+          then
+            ## when cding or checking for existence of a dir, the var needs to be quoted
+            ## to properly handle spaces.
+            if [[ -e "$dir_arg" ]]
+            then
+              # changing to the directory allows relative paths to be used
+              cd "$dir_arg"
+              do_stuff=1
+            else
+              echo "The data directory does not exist."
+              do_stuff=0
+            fi
+          else
+            do_stuff=1
+          fi
+
+          ## Actually do the stuff
+          if [ $do_stuff -eq 1 ]
+          then
+	    ## these could probably be eliminated
+	    directory="$PWD"
+	    copy_dir="$copy_path"
+
+            current_date=`date +%s`
+            auto_end_date=`expr $current_date + \( 60 \* 60 \* 24 \* $days \)`
+
+            # if there is already at least one directory being cleared, let user know
+            list_check=`grep / "$THE_LIST"`
+            if [ $? -eq 0 ]
+            then
+              echo ""
+              echo "Here are the directories that are currently being cleared:"
+              cat "$THE_LIST" | colrm 1 11 | sort
+              echo ""
+              echo "Press \"Enter\" to continue -- or wait $TIME_LIMIT seconds"
+              read -t $TIME_LIMIT Keypress
+            fi
+
+            list_check=`grep "$directory\$" "$THE_LIST"`
+            if [ $? -eq 0 ]
+            then
+              grep -v "$directory\$" "$THE_LIST" > "$UPDATE_FILE"
+              mv -f "$UPDATE_FILE" "$THE_LIST"
+            fi
+            echo "$auto_end_date:$directory:$copy_dir:$extension:$subdirectory" >> "$THE_LIST"
+            echo "Added $directory to the list of directories to keep clear"
+          fi
+        fi
+      fi
+    fi
+  fi
+fi

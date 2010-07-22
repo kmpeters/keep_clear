@@ -1,0 +1,88 @@
+#!/bin/bash
+# Script to clear a directory of data files
+
+num_args=$#
+copy_dir=""
+
+case $num_args in
+  2 )
+  working_dir="$PWD"
+  ;;
+
+  3 )
+  working_dir="$3"
+  ;;
+
+  4 )
+  working_dir="$3"
+  copy_dir="$4"
+  ;;
+esac
+
+## keep_clear_cron always passes the extension and subdirectory as arguments
+extension="$1"
+subdirectory="$2"
+
+# Put the time file in the working directory so multiple dirs may be cleaned.
+TIME_FILE="$working_dir/.keep_clear_script_time_file"
+
+if [ -e "$working_dir" ]
+then
+  if [[ -e "$TIME_FILE" && -e "$working_dir/$subdirectory" ]]
+  then
+    cd "$working_dir"
+    # This is where the work is done                         
+    ## find data files in the current directiory that are not newer than the time file.
+    ## print the list with null char separators and then replaces the nulls with semicolons
+    file_list=`find -maxdepth 1 ! -cnewer "$TIME_FILE" -regex ".*\.$extension" -print0 | tr '\000' ';'`    
+    if [ $? -eq 0 ]
+    then
+      IFS=$';'
+      if [[ ! ("$copy_dir" = "") ]]
+      then
+        echo "copying files"
+	## I already checked for existence of the copy dir when user ran keep_clear 
+	for file_name in $file_list
+	do
+          #echo "cp -pf \"$file_name\" \"$copy_dir\""
+          #echo "$file_name -> $copy_dir"
+          echo "$file_name"
+	  cp -pf "$file_name" "$copy_dir"
+	done
+
+      fi
+      echo "moving files"
+      for file_name in $file_list
+      do
+        #echo "mv \"$file_name\" \"$working_dir/$subdirectory\""
+        #echo "$file_name -> $working_dir/$subdirectory"
+        echo "$file_name"
+        mv "$file_name" "$working_dir/$subdirectory"
+      done
+
+    else
+      echo "nothing to move"
+    fi
+    # touch the time file
+    touch "$TIME_FILE"
+  else
+    # create the time file if it doesn't exist
+    if [ ! -e "$TIME_FILE" ]
+    then 
+      # create the file
+      echo "creating the time file"
+      touch "$TIME_FILE"
+      # it might be a good idea to put an explanation in the file.
+    fi
+    # create an images directory if it doesn't exist           
+    if [ ! -e "$working_dir/$subdirectory" ]                            
+    then                                                       
+      # create the directory                                   
+      echo "creating the image subdirectory"                   
+      mkdir "$working_dir/$subdirectory"
+    fi                                                         
+  fi
+else
+  echo "The specified path does not exist."
+fi
+

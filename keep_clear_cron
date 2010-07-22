@@ -1,0 +1,202 @@
+#!/bin/bash
+# Cron script which calls keep_clear_script
+
+MOVE_SCRIPT="$HOME/.keep_clear/keep_clear_script"
+NAME=`expr "$MOVE_SCRIPT" : '.*/\(.*$\)'`
+TIME_FILE_NAME=.keep_clear_script_time_file
+THE_LIST="$HOME/.keep_clear_script_list"
+WORKING_LIST="$HOME/.keep_clear_script_temp"
+
+if [ ! -e "$THE_LIST" ]
+then
+  touch "$THE_LIST"
+fi
+
+current_time=`date +%s`
+
+echo ""
+echo "cleaning the list of directories"
+echo ""
+cat "$THE_LIST"
+echo ""
+
+# Clean the list of directories
+lines=`cat "$THE_LIST"`
+
+# set the Internal Field Separator to the end of line character, ";"
+IFS=$'\n'
+for line in $lines
+do
+  item_index=0
+  # set the Internal Field Separator to the end of line character, ":"
+  IFS=$":"
+  for item in $line
+  do
+    num=`expr $item_index % 5`
+
+    case $num in
+
+      0 )
+      # It's an expiration time
+      file_time=$item
+      ### the following lines were used to debug a problem with the script behaving differently
+      ### from a cron job.  On the cmd line it worked, but when run from cron the first char of 
+      ### the file time was a line feed.
+      #echo "file_time ${#file_time} $file_time"
+      #first_char=${item:0:1}
+      #ordinal=`printf %d "'$first_char"`
+      #echo "ordinal = $ordinal"
+      ;;
+
+      1 )
+      # It's a directory path to keep clear
+      file_path="$item"
+
+      echo "$file_path"
+      echo "current time:    $current_time"
+      echo "expiration time: $file_time"
+
+      if [[ `expr $current_time \> $file_time` -eq 1 ]]
+      then
+        echo "job has expired"
+        expired=1
+        # Remove the time file for the expired directory
+        echo "removing $file_path/$TIME_FILE_NAME"
+        rm -f "$file_path/$TIME_FILE_NAME"
+      else
+        echo "job is still current"
+        expired=0
+      fi
+      
+      if [ ! -e "$file_path" ]
+      then
+        echo "Path doesn't exist: $file_path"
+        dir_no_exist=1
+      else
+        echo "path is ok"
+        dir_no_exist=0
+      fi
+      
+      if [[ $expired -eq 1 || $dir_no_exist -eq 1 ]]
+      then
+        echo "delete this entry"
+        cat "$THE_LIST" | grep -v "$file_path:" > "$WORKING_LIST"
+        mv -f "$WORKING_LIST" "$THE_LIST"
+      else
+        echo "keep this entry"
+      fi      
+      echo ""
+      ;;
+        
+      #2 )
+      ## this is a copy path which may or may not exist
+      #echo $item
+      #;;
+
+      #3 )
+      ## this is the data file extension
+      #echo $item
+      #;;
+
+      #4 )
+      ## this is the subdirectory
+      #echo $item
+      #;;
+
+    esac
+
+    # increment the index to move to the next item
+    item_index=`expr $item_index + 1`
+    
+  done
+
+  # return the Internal Field Separator to the line separator 
+  #   so we don't break the outer loop.
+  IFS=$'\n'
+
+done
+
+
+# keep the directories clear
+ps -e | grep $NAME
+if [ $? -eq 1 ]
+then
+  echo "clearing the directories of data files"
+  echo ""
+
+  # Clear the directories
+  lines=`cat "$THE_LIST"`
+
+  # set the Internal Field Separator to the end of line character, ";"
+  IFS=$'\n'
+
+  for line in $lines
+  do
+    item_index=0
+
+    # set the Internal Field Separator to the end of line character, ":"
+    IFS=$":"
+
+    for item in $line
+    do
+      num=`expr $item_index % 5`
+
+      case $num in
+
+        #0 )
+        ## this is the expiration time
+        #echo $item
+        #;;
+
+        1 )
+        clear_dir="$item"
+	echo "$clear_dir"
+        ;;
+
+        2 )
+	if [[ ! ("$item" = "") ]]
+	then
+          copy_dir="$item"
+	  copy_flag=1
+	else
+	  copy_flag=0
+	fi
+        ;;
+
+	3 )
+        extension="$item"
+	;;
+
+	4 )
+        subdirectory="$item"
+	;;
+
+      esac
+
+      item_index=`expr $item_index + 1`    
+
+    done
+
+    if [[ -e "$clear_dir" ]]
+    then
+      if [[ $copy_flag -eq 1 ]]
+      then
+        "$MOVE_SCRIPT" "$extension" "$subdirectory" "$clear_dir" "$copy_dir"
+      else
+        "$MOVE_SCRIPT" "$extension" "$subdirectory" "$clear_dir"
+      fi
+      echo ""
+    else
+      echo "$clear_dir has been removed while the script was running"
+    fi
+
+    # return the Internal Field Separator to the line separator 
+    #   so we don't break the outer loop.
+    IFS=$'\n'
+
+  done
+
+else
+  echo "keep_clear_script is still running."
+fi
+
