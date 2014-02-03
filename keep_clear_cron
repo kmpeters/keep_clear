@@ -118,7 +118,7 @@ done
 
 
 # keep the directories clear
-ps -e | grep $NAME
+ps -ef | grep -v grep | grep $NAME
 if [ $? -eq 1 ]
 then
   echo "clearing the directories of data files"
