@@ -44,20 +44,30 @@ then
 	## I already checked for existence of the copy dir when user ran keep_clear 
 	for file_name in $file_list
 	do
-          #echo "cp -pf \"$file_name\" \"$copy_dir\""
-          #echo "$file_name -> $copy_dir"
-          echo "$file_name"
-	  cp -pf "$file_name" "$copy_dir"
-	done
+          if [ ! -e $copy_dir/$file_name ]
+          then
+            #echo "cp -pf \"$file_name\" \"$copy_dir\""
+            #echo "$file_name -> $copy_dir"
+            echo "$file_name"
+	    cp -pf "$file_name" "$copy_dir"
+	  else
+            echo "$file_name already exists in $copy_dir"
+          fi
+        done
 
       fi
       echo "moving files"
       for file_name in $file_list
       do
-        #echo "mv \"$file_name\" \"$working_dir/$subdirectory\""
-        #echo "$file_name -> $working_dir/$subdirectory"
-        echo "$file_name"
-        mv "$file_name" "$working_dir/$subdirectory"
+        if [ ! -e $working_dir/$subdirectory/$file_name ]
+        then
+          #echo "mv \"$file_name\" \"$working_dir/$subdirectory\""
+          #echo "$file_name -> $working_dir/$subdirectory"
+          echo "$file_name"
+          mv "$file_name" "$working_dir/$subdirectory"
+        else
+          echo "$file_name already exists in $working_dir/$subdirectory"
+        fi
       done
 
     else
